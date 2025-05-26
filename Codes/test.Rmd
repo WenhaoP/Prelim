@@ -1,0 +1,205 @@
+---
+title: "Untitled"
+author: "Wenhao Pan"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, root.dir = rprojroot::find_rstudio_root_file())
+```
+
+# Variable name interpretation
+
+Here is the interpretation of the variable names in the Asadi et al.'s (2015) code
+
+* `CatCntr`
+* `CatCntrWt`: Hydrological locations $H(t)$.
+* `EucDis`: Euclidean distances between gauging stations.
+* `RiverDis`: River distances between gauging stations, $d(t_i,t_j)$.
+* `Weight`: River weights, $\pi_i$'s.
+* `StsInfo`: River name, latitude, longtitude, and average volume of each gauging station.
+* `StsTSs`: Average daily discharge of each station from 1900 to 2014 with missing data.
+* `ComTSs`: Common measurements (daily measurement in June, July, and August during 1960 - 2009) at all stations.
+* `CommonMaxima`: Annual maxima of common measurements at all stations.
+
+# Data verification
+
+```{r}
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+root.dir <- rprojroot::find_rstudio_root_file()
+source(paste(root.dir, "/Codes/Functions.R", sep=""))
+
+# Loading the data provided by the original authors
+FileList <- list.files(path = "C:/Code/Prelim/Data")
+for (i in 1:length(FileList)){
+  load(paste("C:/Code/Prelim/Data", FileList[i], sep="/"))
+}
+StsChos <- c(1:31) # Station indices
+NoSt <- length(StsChos) # Total number of stations
+```
+
+```{r}
+# check the range of daily average discharges at each station
+sapply(StsTSs, function(x) mean(x$Val))
+```
+
+```{r}
+# check CommonMaxima
+ComTSs.copy <- data.frame(ComTSs)
+colnames(ComTSs.copy)[2:32] <- as.character(1:31)
+CommonMaxima.test <- ComTSs.copy %>%
+  pivot_longer(
+    -Date, 
+    names_to = "Station", 
+    values_to = "Discharge"
+  ) %>%
+  mutate(Station = as.integer(Station), Year = format(Date, "%Y")) %>%
+  filter(Year <= 2009) %>%
+  group_by(Station, Year) %>%
+  summarize(AnnualMax = max(Discharge, na.rm = TRUE), .groups = "drop") %>%
+  arrange(Station, Year)
+
+# should return true
+all(CommonMaxima.test$AnnualMax == as.vector(CommonMaxima))
+```
+
+
+```{r}
+# check that most extreme discharges happen in summer
+
+# station 1 in 2005
+station.1 <- as.data.frame(StsTSs[1])
+station.1$Date <- as.Date(station.1$Date)
+ggplot(station.1, aes(x = Date, y = Val)) +
+  annotate("rect",
+           xmin = as.Date("2005-06-01"),
+           xmax = as.Date("2005-08-31"),
+           ymin = -Inf, ymax = Inf,
+           alpha = 0.2, fill = "skyblue") +
+  geom_line() +
+  scale_x_date(
+    date_breaks = "1 month", date_labels = "%b",
+    limits = as.Date(c("2005-01-01", "2005-12-31"))) +
+  theme_minimal() +
+  theme(text = element_text(size = 16)) +
+  labs(
+    title = "Average daily dicharge of gauging station 1 in 2005",
+    x = "Time", y = "Average daily dicharge")
+ggsave(paste(root.dir, "/Plots/station_1_2005.png", sep=""))
+
+# station 19 in 2002
+station.19 <- as.data.frame(StsTSs[19])
+station.19$Date <- as.Date(station.19$Date)
+ggplot(station.19, aes(x = Date, y = Val)) +
+  annotate("rect",
+           xmin = as.Date("2002-06-01"),
+           xmax = as.Date("2002-08-31"),
+           ymin = -Inf, ymax = Inf,
+           alpha = 0.2, fill = "skyblue") +
+  geom_line() +
+  scale_x_date(
+    date_breaks = "1 month", date_labels = "%b",
+    limits = as.Date(c("2002-01-01", "2002-12-31"))) +
+  theme_minimal() +
+  theme(text = element_text(size = 16)) +
+  labs(
+    title = "Average daily dicharge of gauging station 19 in 2002",
+    x = "Time", y = "Average daily dicharge")
+ggsave(paste(root.dir, "/Plots/station_19_2002.png", sep=""))
+```
+
+```{r}
+# check declustering 
+Years <- unique(as.numeric(substr(ComTSs[, 1], 1, 4)))
+U <- 0.1
+Lag <- 4
+Plotting <- 0
+StNames <- as.character(StsChos)
+YearsWithEvent <- numeric()
+AllEvMat <- matrix(0, length(StNames), 1)
+AllRes <- list()
+for (i in 1:length(Years)){
+  cat(paste("Declustering year", Years[i], "\n"))
+  Res <- ObtainMultVarEvents(
+    TSs = ComTSs, U = U, Lag = Lag, Year = Years[i],
+    StNames = StNames, Plotting = Plotting, mfrow = c(NoSt,1))  ## For Censored Likelihood
+  Events <- Res$AllEvMat
+  Locations <- Res$Location
+  if (length(Events) > 0) {
+    YearsWithEvent <- c(YearsWithEvent, rep(Years[i], dim(Events)[2]))
+    AllEvMat <- cbind(AllEvMat, Events)
+  }
+  AllRes[[i]] <- Res 
+}
+DataEvents <- t(AllEvMat[, -1])
+rownames(DataEvents) <- YearsWithEvent 
+
+PlottingDeclusterdEvents(Year = 1989,
+                         Stations = c(1, 2, 11, 13, 15),
+                         AllRes = AllRes,
+                         ComTSs = ComTSs,
+                         StsInfo = StsInfo,
+                         filename = paste(root.dir, "/Plots/Declustering.pdf", sep=""))
+```
+
+```{r}
+Years
+```
+
+
+```{r}
+plot(as.vector(EucDis), as.vector(RiverDis))
+abline(a = 0, b = 1, col = "red", lwd = 2)
+```
+
+
+```{r}
+# Plotting function of ECs against Euclidean and Hydrological distances
+plotEucVsHyd <- function(ECemp,
+                         ECtheo,
+                         DistEuc = EucDisChos,
+                         DistCatch = CatchDistancesNew,
+                         is.con = IsConnectedNew,
+                         StsIdx = StsChos,
+                         which.plots = c(TRUE,TRUE,FALSE),
+                         which.labels = c(TRUE,TRUE,TRUE),
+                         PDF = FALSE,
+                         filename = "")
+{
+  
+  if(PDF) pdf(filename, width = sum(which.plots) * 7)
+  par(cex = 1.3, cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5, pch = 19,
+      mar = c(5,5,4,2) +.1)
+  len <- length(StsChos)
+  RivLabel <- matrix("NA", ncol = len, nrow = len)
+  for (i in 1:(len-1))
+    for (j in (i+1):len)
+      RivLabel[i,j] <- paste(as.character(StsIdx[i]),as.character(StsIdx[j]),sep=",")
+  
+  upper.idx <- upper.tri(ECemp)
+  con.idx <- as.logical(upper.idx * is.con)
+  not.con.idx <- as.logical(upper.idx * !(is.con))
+  par(mfrow=c(1,sum(which.plots)))
+  
+  ## Plot ECemp
+  if(which.plots[1]){
+    plot(DistEuc[not.con.idx],ECemp[not.con.idx], xlab = "Euclidean Distance (km)", ylab="Extremal Coefficient", ylim = c(1,2),xlim = c(0,max(DistEuc)))   
+    points(DistEuc[con.idx],ECemp[con.idx],col="blue",pch=4,cex = 1.3)
+    if(which.labels[1]) thigmophobe.labels(DistEuc[upper.idx], ECemp[upper.idx], labels = RivLabel[upper.idx], cex=0.6, offset=0.5)
+    #legend("topleft", col=c("blue","black"), pch=c(4,19), legend=c("flow-connected pairs","flow-unconnected pairs"), bty = "n", cex =2, pt.cex = 1.5)
+    
+  }
+  
+  
+  ## Plot ECtheo
+  if(which.plots[2]){
+    plot(DistCatch[not.con.idx],ECtheo[not.con.idx], xlab = "Hydrological Distance (km)", ylab="Extremal Coefficient",ylim = c(1,2),,xlim = c(0,max(DistCatch))) 
+    points(DistCatch[con.idx],ECtheo[con.idx],col="blue",pch=4,cex = 1.3)
+    if(which.labels[2]) thigmophobe.labels(DistCatch[upper.idx], ECtheo[upper.idx], labels = RivLabel[upper.idx], cex=0.6, offset=0.5)
+    #legend("topleft", col=c("blue","black"), pch=c(4,19),  legend=c("flow-connected pairs","flow-unconnected pairs"), bty = "n", cex = 1.5, pt.cex = 1.5)
+  }
+```
+
