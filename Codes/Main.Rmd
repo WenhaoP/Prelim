@@ -13,7 +13,6 @@ knitr::opts_chunk$set(echo = TRUE, root.dir = rprojroot::find_rstudio_root_file(
 
 Here is the interpretation of the variable names in the Asadi et al.'s (2015) code
 
-* `CatCntr`
 * `CatCntrWt`: Hydrological locations $H(t)$.
 * `EucDis`: Euclidean distances between gauging stations.
 * `RiverDis`: River distances between gauging stations, $d(s,t)$.
@@ -70,7 +69,7 @@ all(CommonMaxima.test$AnnualMax == as.vector(CommonMaxima))
 
 # Plots
 
-## Figure 
+## Figure 6
 
 ```{r}
 # check that most extreme discharges happen in summer
@@ -116,7 +115,7 @@ ggplot(station.19, aes(x = Date, y = Val)) +
 ggsave(paste(root.dir, "/Plots/station_19_2002.png", sep=""))
 ```
 
-## Figure 
+## Figure 7: declustering 
 
 ```{r}
 # check declustering 
@@ -152,7 +151,7 @@ PlottingDeclusterdEvents(Year = 1989,
                          filename = paste(root.dir, "/Plots/Declustering.pdf", sep=""))
 ```
 
-##
+## Figure 3：River distance vs Euclidean distance
 
 ```{r}
 # Remove diagonal entries (same as before)
