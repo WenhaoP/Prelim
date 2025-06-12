@@ -4,7 +4,7 @@ library(evd)
 source("Codes/Functions.R")
 
 ### Loading Data ###
-FileList <- list.files(path="Data")
+FileList <- list.files(path="Data", pattern = "\\.RData$")
 for (i in 1:length(FileList)){
   load(paste("Data",FileList[i],sep="/"))
 }
@@ -13,7 +13,6 @@ StsChos <- c(1:31)
 NoSt <- length(StsChos)
 
 ### GEV analysis  ###
-
 method <- "BFGS" 
 control <- list(maxit = 1000, reltol=10^(-30), abstol=0.0001, trace=2)
 
@@ -29,7 +28,6 @@ for (i in 1:NoSt){
 }
 
 ### Extraction of univariate events  ###
-
 U <- 0.9
 Lag <- 5
 StNames <- as.character(1:31)
@@ -56,19 +54,15 @@ for (i in 1:NoSt) {
 	NoOfYears[i] <- length(Years)
 }
 
-
 ### Fitting a GEVD to each station (by maximizing the joint Poisson process likelihood; cf. formula (21) in the paper) ###
-
-
-
 PPRes <- list()
 ParsPP <- matrix(0,NoSt,3)
 PPLLFree <- numeric()
 for (i in 1:NoSt) {
 	Init <- GevPars[i,]
-	PPRes[[i]] <- PPFit(Data=AllEvents[i],u=Threshold[i],NoYears=NoOfYears[i],
-	                    Init=Init,CovarMu=matrix(1,1,1),CovarSc=matrix(1,1,1),
-	                    CovarXi=matrix(1,1,1),LogModel=FALSE,method=method,control=control)
+	PPRes[[i]] <- PPFit(Data = AllEvents[i], u = Threshold[i], NoYears = NoOfYears[i],
+	                    Init = Init, CovarMu = matrix(1,1,1), CovarSc = matrix(1,1,1),
+	                    CovarXi = matrix(1,1,1), LogModel = FALSE, method = method, control = control)
 	ParsPP[i,] <- PPRes[[i]]$par
 	PPLLFree[i] <- PPRes[[i]]$value
 }
@@ -76,8 +70,6 @@ for (i in 1:NoSt) {
 M1LL <- sum(PPLLFree)
 
 ### Regionalized model with covariates; cf. formula (32) ###
-
-
 Grp1 <- c(11,12,16,17,18,19,21,22)
 Grp2 <- c(13,28:31)
 Grp3 <- c(1:10,14,15,20)
@@ -93,9 +85,12 @@ Normalized <- FALSE
 CovarLog <- cbind(CovarStsAll[,1],log(CovarStsAll[,2:6]))
 
 ### The covariates which are siginficant, obtained by log-likelihood ratio test###
-MuCovars <- list(c(2,3,4,6),c(2,4,6),c(2,3,4,6),c(2,4,6))
-ScCovars <- list(c(2,3,4),c(2,4),c(2,3,4),c(2,4))
-InitAll <- list(c( 1.1, 0.9, 0.7, 1.2, 0, -0.1), c(0.6, 0.5, 0.4, 1.7, 0.1, -0.3), c(1.2, 0.7, 0.9, 0.7, -0.1, -0.5), c(0.1, 1, -0.1, 1.3, 0.5, 0.1))
+MuCovars <- list(c(2,3,4,6), c(2,4,6), c(2,3,4,6), c(2,4,6))
+ScCovars <- list(c(2,3,4), c(2,4), c(2,3,4), c(2,4))
+InitAll <- list(c(1.1, 0.9, 0.7, 1.2, 0, -0.1), 
+                c(0.6, 0.5, 0.4, 1.7, 0.1, -0.3), 
+                c(1.2, 0.7, 0.9, 0.7, -0.1, -0.5), 
+                c(0.1, 1, -0.1, 1.3, 0.5, 0.1))
 
 for (i in 1:length(Grp)) {
 	GrSts <- Grp[[i]]
@@ -108,15 +103,15 @@ for (i in 1:length(Grp)) {
 	CovarScReg <-  CovarSc[GrSts,]
 	CovarXi <- as.matrix(CovarLog[GrSts ,1])
 	Init <- c(InitMu,InitSc,InitXi)
-	PPCovariateModels[[i]] <- PPFit(Data=AllEvents[GrSts],u=Threshold[GrSts],
-	                                NoYears=NoOfYears[GrSts],Init=Init,CovarMu=CovarMuReg,CovarSc=CovarScReg,
-	CovarXi=CovarXi,LogModel=TRUE,method=method,control=control)
+	PPCovariateModels[[i]] <- PPFit(Data = AllEvents[GrSts], u = Threshold[GrSts],
+	                                NoYears = NoOfYears[GrSts], Init = Init, CovarMu = CovarMuReg, CovarSc = CovarScReg,
+	                                CovarXi = CovarXi, LogModel = TRUE, method = method, control = control)
 	CovarLL[i] <- PPCovariateModels[[i]]$value
 	ParsModelTemp <- PPCovariateModels[[i]]$par
 	MuCov <- exp((CovarMuReg %*% ParsModelTemp [(1):(ncol(CovarMu))]))
 	ScCov <- exp((CovarScReg %*%ParsModelTemp[(ncol(CovarMu)+1):(ncol(CovarMu)+ncol(CovarSc))]))
 	XiCov <- as.matrix(CovarXi) %*%  ParsModelTemp[(ncol(CovarMu)+ncol(CovarSc)+1):length(ParsModelTemp)]
-	ParsCovModel[Grp[[i]],] <- cbind(MuCov,ScCov,XiCov)
+	ParsCovModel[Grp[[i]], ] <- cbind(MuCov, ScCov, XiCov)
 }
 
 M2LL <- sum(CovarLL)
@@ -126,7 +121,6 @@ M1AIC <- 2*(NoSt*3+M1LL)
 M2AIC <- 2*(length(Grp)+length(unlist(ScCovars))+length(unlist(MuCovars))+M2LL)
 
 ### Fig. 2 (Left) in supplementary material ###
-
 ChosStForPlot<- c(7,13)
 
 k <- 1
@@ -143,7 +137,6 @@ for(i in ChosStForPlot){
 
 ### Fig. 2 (Right) in supplementary material ###
 ### Compute 100y return levels on the whole network; cf. Fig. 6 ###
-
 NoIn <- nrow(IntPolPointCenter)
 
 GrpIn1 <- which(IntPolPointCenter[,1] < 11.6 & IntPolPointCenter[,2] < 47.72)
@@ -178,11 +171,3 @@ HundRetLevelSts <- numeric()
 for (i in 1:NoSt){
   HundRetLevelSts [i] <- qgev(.99,loc=ParsPP[i,1],scale=ParsPP[i,2],shape=ParsPP[i,3])
 }
-
-
-
-
-
-
-
-

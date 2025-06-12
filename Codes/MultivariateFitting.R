@@ -1,7 +1,7 @@
 source("Codes/Functions.R")
 
 ### Loading Data ###
-FileList <- list.files(path = "Data")
+FileList <- list.files(path = "Data", pattern = "\\.RData$")
 for (i in 1:length(FileList)){
   load(paste("Data", FileList[i], sep="/"))
 }
@@ -49,20 +49,21 @@ for(i in 1:(NoSt-1))
 }
 
 ### Transform to Pareto ###
-TSNew <- matrix(0,dim(DataEvents)[1],dim(DataEvents)[2])
+TSNew <- matrix(0, dim(DataEvents)[1], dim(DataEvents)[2])
 for (i in 1:dim(DataEvents)[2]) {
-  TSNew[,i] <- Margin2Pareto(DataEvents[,i], empirical = TRUE) 
+  TSNew[, i] <- Margin2Pareto(DataEvents[, i], empirical = TRUE) 
 }
 
 ### Fitting of the max-stable process on river network ###
 
-theta0 <- 2 #1*max(RiverDisChos)
-alpha0 <- 1.6
-s0 <- 289.73 ##max(CatCntrWtKmChos) ## FIX
-riv.lmb0 <- .3
-euc.lmb0 <- .05
-beta0 <- 1.1
-c0 <- .5
+# initial values for spectral estimation
+theta0 <- 2      # scale of dependence (tau)
+alpha0 <- 1.6    # variogram shape parameter (alpha)
+s0 <- 289.73     # scaling coefficient of lambda_euc
+riv.lmb0 <- .3   # flow-connection dependence kernel weight (lambda_euc)
+euc.lmb0 <- .05  # precipitation dependence kernel weight (lambda_euc)
+beta0 <- 1.1     # rotation parameter
+c0 <- .5         # dilation parameter
 
 ### SPECTRAL ESTIMATION ###
 
@@ -72,11 +73,11 @@ fit2 <- pareto_BR_River(
   euc.coord = CatCntrWt, 
   is.connected = FlowCon,
   riv.weights = Weight,
-  u=quantile(rowSums(TSNew), 0.87),
-  init= c(theta0, alpha0, s0, riv.lmb0, euc.lmb0, beta0, c0),
-  fixed=c(FALSE, FALSE, TRUE, FALSE, FALSE, FALSE, FALSE),
+  u = quantile(rowSums(TSNew), 0.87),
+  init = c(theta0, alpha0, s0, riv.lmb0, euc.lmb0, beta0, c0),
+  model = 3,
   maxit = 1000,
-  method= "BFGS") 
+  method = "BFGS") 
 
 ### CENSORED ESTIMATION: This is computationally expensive (to skip it, just go to "par  <- fitM4$par" for the result which is already loaded)###
 
@@ -87,9 +88,9 @@ fitM4 <- pareto_BR_River_cen(
     riv.weights = Weight,
     u=quantile(TSNew, .90),   
     init= c(theta0, alpha0, s0, riv.lmb0, euc.lmb0, beta0, c0),
-    fixed=c(FALSE, FALSE, TRUE, FALSE, FALSE, FALSE, FALSE),
+    model = 3,
     maxit = 200,
-    method= "BFGS")
+    method = "BFGS")
 
 par  <- fitM4$par 
 
@@ -141,29 +142,34 @@ PlottingDeclusterdEvents(Year = 1989,
 ### Left ###
 ScSts <- c(2,5)
                                         
-filename <- paste(paste(as.character(ScSts[1]),as.character(ScSts[2]),sep="-"),".pdf",sep="")
+filename <- paste(
+  paste(as.character(ScSts[1]), as.character(ScSts[2]), sep="-"),
+  ".pdf",
+  sep="")
 
-ScatterPlot(ScSts=ScSts,
+ScatterPlot(ScSts = ScSts,
             StsInfo,
-            X=TSNew,
-            filename = paste("Plots",filename,sep="/"))
+            X = TSNew,
+            filename = paste("Plots", filename, sep="/"))
 
-### Left ###
+### Right ###
 ScSts <- c(13,16)
                                         
-filename <- paste(paste(as.character(ScSts[1]),as.character(ScSts[2]),sep="-"),".pdf",sep="")
+filename <- paste(
+  paste(as.character(ScSts[1]), as.character(ScSts[2]), sep="-"),
+  ".pdf",
+  sep="")
 
-ScatterPlot(ScSts=ScSts,
+ScatterPlot(ScSts = ScSts,
             StsInfo,
-            X=TSNew,
-            filename = paste("Plots",filename,sep="/"))
+            X = TSNew,
+            filename = paste("Plots", filename, sep="/"))
 
 ### Fig. 8 ###
 
 euc.dist <- as.matrix(dist(CatCntrWt %*% t(rot.mat)))    
 
 ### Left ###
-
 plotECF(ECemp = ThetaOfBlockMaxima,
         ECtheo = Theta.cen,
         Dist = CatchEucDisWt,
@@ -175,7 +181,6 @@ plotECF(ECemp = ThetaOfBlockMaxima,
         filename = paste("Plots","ECF_Emp_HR.pdf",sep="/"))
 
 ### Center ###
-
 plotECF(ECemp = ThetaOfBlockMaxima,
         ECtheo = Vario2EC(
             vario(par,
@@ -194,7 +199,6 @@ plotECF(ECemp = ThetaOfBlockMaxima,
 
 
 ### Right ###
-
 plotECF(ECemp = ThetaOfBlockMaxima,
         ECtheo = Vario2EC(
             vario(par,
@@ -212,19 +216,16 @@ plotECF(ECemp = ThetaOfBlockMaxima,
         filename = paste("Plots","EmpVSModel3.pdf",sep="/")) 
 
 ### Fig. 9 ###
-
 require("SpatialExtremes")
 require("mvtnorm")
 library("ismev")
 Maxima <- CommonMaxima
 
 ### N=NoSt=31 reproduce the bottom-right plot of Fig. 9. For other random groups, change N ###
-
 N <- 31
 StsForPlot <- sort(sample(StsChos,N))
 
 ### Transformation to Unit Frechet ###
-
 TransMax <- matrix(0,nrow(Maxima),N) 
 for (i in 1:N){
     Pars <- gev.fit(Maxima[,StsForPlot[i]])$mle
@@ -239,7 +240,6 @@ TSmax <- apply(TransMax,1,max)
 quants.TSmax <- sort(TSmax)
 
 ### Here the model quantiles are computed ###
-
 d <- ncol(TransMax)
 V <- function(x, par){
     d <- length(x)    
@@ -276,13 +276,8 @@ lines(log(quants.modelMax), log(quants.indep),col="blue",lty=2)
 lines(log(quants.modelMax), log(quants.dep),col="blue",lty=3)
 dev.off()
 
-
-
-
 ### Fig. 1 of supplementary material ###
 
 BoxPlots(Par.spec=Par.sim.spec,
          Par.cens=Par.sim.cens,
          filename = paste("Plots","Sim_Study.pdf",sep="/"))
-
-

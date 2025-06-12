@@ -46,7 +46,7 @@ vario <- function(par,
   euc.dist <- as.matrix(dist(euc.coords %*% t(rot.mat)))        
   
   riv.lmb * 2 * (1 - cov.linear(riv.dist, 500*theta)*riv.weights) +
-    euc.lmb * var.frac(euc.dist,s,alpha)  ##  * 500
+    euc.lmb * var.frac(euc.dist, s, alpha)  ##  * 500
 }
 
 
@@ -337,7 +337,7 @@ Margin2Pareto <- function(Data, quant = 0.95, clustering = FALSE, empirical = FA
 {
   require("evd")
   len <- length(Data)
-  if(empirical)
+  if (empirical)
   {
     trans.data <- double(len)
     trans.data <- 1/(1 - rank(Data) / (len+1))
@@ -353,7 +353,9 @@ Margin2Pareto <- function(Data, quant = 0.95, clustering = FALSE, empirical = FA
     trans.data[Data <= threshold] <-
       1/(1 - rank(Data)[Data <= threshold] / (len+1))
     
-    trans.data[Data > threshold] <- pmax((1+shape*(Data[Data > threshold]-threshold)/scale),0)^(1/shape) / (1 - quant)
+    trans.data[Data > threshold] <- pmax(
+      (1 + shape * (Data[Data > threshold]- threshold) / scale),
+      0)^(1 / shape) / (1 - quant)
   }
   return(trans.data)
 }
@@ -362,28 +364,37 @@ Margin2Pareto <- function(Data, quant = 0.95, clustering = FALSE, empirical = FA
 #------------------------------------------------------------------------------------------------------------------------------
 # Fitting of Brown-Resnick process on river network using SPECTRAL DENSITY
 #------------------------------------------------------------------------------------------------------------------------------
-pareto_BR_River <- function(data,
-                            riv.dist,
-                            euc.coord,
-                            is.connected,
-                            riv.weights,
-                            u,
-                            init,
-                            fixed=c(FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE),
-                            maxit = 100,method=method)
+pareto_BR_River <- function(
+    data,
+    riv.dist,
+    euc.coord,
+    is.connected,
+    riv.weights,
+    u,
+    init,
+    model = 3,
+    maxit = 100,
+    method = method,
+    verbose = FALSE)
 {
+  if (model == 1) {
+    fixed = c(FALSE, FALSE, TRUE, TRUE, FALSE, FALSE, FALSE)    # fix lambda_riv 
+  } else if (model == 2) {
+    fixed = c(FALSE, FALSE, TRUE, TRUE, FALSE, FALSE, FALSE)    # fix lambda_riv 
+  } else if (model == 3) {
+    fixed = c(FALSE, FALSE, TRUE, FALSE, FALSE, FALSE, FALSE)
+  } else {
+    fixed = c(FALSE, FALSE, TRUE, FALSE, FALSE, TRUE, TRUE)     # fix beta, c 
+  }
   
   ti <- proc.time()
-  
   d <- ncol(data)
   
-  
+  # log spectral density
   logdV <- function(x,par){
     if (is.vector(x)){d <- length(x)}
     if (is.matrix(x)){d <- ncol(x)}	
-    
     i <- 1
-    
     varioHalf <- 1/2 * vario(par,
                              riv.dist = riv.dist,
                              euc.coords = euc.coord,
@@ -394,20 +405,21 @@ pareto_BR_River <- function(data,
     cholS <- chol(S)
     Sm1 <- chol2inv(cholS)
     logdetS <- 2*sum(log(diag(cholS))) 
+    
     if (is.vector(x)){
       y <- (log(x/x[i])+ varioHalf[,i])[-i]
       logdv <- - sum(log(x)) - log(x[i]) -((d-1)/2)*log(2*pi) -1/2*logdetS  - 1/2 * t(y)%*%Sm1%*%y
     }
+    
     if (is.matrix(x)){
       y <- (t(t(log(x/x[,i])) + varioHalf[,i]))[,-i]
       logdv <- - apply(log(x),1,sum) - log(x[,i]) -((d-1)/2)*log(2*pi) -1/2*logdetS  - 1/2 * diag(y%*%Sm1%*%t(y))
     }
-    #print(par)
+    
     return(logdv)
   }
   
   # project on the 1-sphere above the threshold
-  
   project <- function(x,u){
     y <- x[which(rowSums(x) > u),]
     y <- y / rowSums(y)            
@@ -416,10 +428,7 @@ pareto_BR_River <- function(data,
   data.u <- project(data,u)
   
   # negative log likelihood function
-  
-  
-  nllik <- function(par){
-    
+  nllik <- function(par, model = 3){
     theta <- par[1]
     alpha <- par[2]
     s <- par[3]
@@ -428,22 +437,79 @@ pareto_BR_River <- function(data,
     beta <- par[6]
     c <- par[7]
     
-    #print(par)
-    if (theta<=0 | riv.lmb <0 | euc.lmb <0 | alpha > 2 | alpha <= 0 | s <= 0 | beta > 3*pi/4 | beta < pi/4 | c < 0){return(10^50)}                
-    else {	
-      y <- sum(logdV(x=data.u,par=par))
-      #print(-y)
-      return(-y)
+    if (model == 1) {
+
+      if (theta <= 0 | euc.lmb <0 | alpha > 2 |
+          alpha <= 0 | s <= 0 | beta > 3*pi/4 | beta < pi/4 | c < 0) # iterates are infeasible
+      {
+        return(10^50)
+      }                
+      else{	
+        y <- sum(logdV(x=data.u, par=par))
+        return(-y)
+      }
+      
+    } else if (model == 2) {
+
+      if (theta <= 0 |euc.lmb <0 | alpha > 2 |
+          alpha <= 0 | s <= 0 | beta > 3*pi/4 | beta < pi/4 | c < 0) # iterates are infeasible
+      {
+        return(10^50)
+      }                
+      else{	
+        y <- sum(logdV(x=data.u, par=par))
+        return(-y)
+      }
+      
+    } else if (model == 3) {
+      
+      if (theta <= 0 | riv.lmb <0 | euc.lmb <0 | alpha > 2 |
+          alpha <= 0 | s <= 0 | beta > 3*pi/4 | beta < pi/4 | c < 0) # iterates are infeasible
+      {
+        return(10^50)
+      }                
+      else{	
+        y <- sum(logdV(x=data.u, par=par))
+        return(-y)
+      }
+      
+    } else {
+      
+      if (theta <= 0 | riv.lmb <0 | euc.lmb <0 | alpha > 2 |
+          alpha <= 0 | s <= 0) # iterates are infeasible
+      {
+        return(10^50)
+      }                
+      else{	
+        y <- sum(logdV(x=data.u, par=par))
+        return(-y)
+      }
     }
+    
+    # if (theta <= 0 | riv.lmb <0 | euc.lmb <0 | alpha > 2 |
+    #     alpha <= 0 | s <= 0 | beta > 3*pi/4 | beta < pi/4 | c < 0) # iterates are infeasible
+    #   {
+    #   return(10^50)
+    #   }                
+    #   else{	
+    #     y <- sum(logdV(x=data.u, par=par))
+    #     return(-y)
+    #   }
   }
   
   init2 <- init[!fixed]
   nllik2 <- function(x){y <- numeric(length(init)); y[!fixed] <- x;
   y[fixed] <- init[fixed];
-  return(nllik(y))}
+  return(nllik(y, model))}
   
   # optimize likelihood
-  opt <- optim(init2,nllik2,hessian=TRUE,control = list(maxit = maxit),method=method)
+  opt <- optim(
+    init2, 
+    nllik2, 
+    hessian = TRUE,
+    control = list(maxit = maxit),
+    method = method
+  )
   
   z <- list()
   z$convergence <- opt$convergence
@@ -451,9 +517,13 @@ pareto_BR_River <- function(data,
   z$par[!fixed] <- opt$par
   z$nllik <- opt$value
   z$hessian <- opt$hessian
-  z$time <- (proc.time()-ti)[3]
-  print(z$nllik)
-  print(z$par)
+  z$time <- (proc.time() - ti)[3]
+  
+  if (verbose) {
+    print(z$nllik)
+    print(z$par)
+  }
+ 
   return(z)
 }
 
@@ -468,21 +538,33 @@ pareto_BR_River_cen <- function(data,
                                 riv.weights,
                                 u,
                                 init,
-                                fixed=c(FALSE,FALSE,FALSE,FALSE,FALSE),
+                                # fixed=c(FALSE,FALSE,FALSE,FALSE,FALSE),
+                                model = 3,
                                 maxit = 100,
                                 method = "BFGS",
-                                seed=123456){
-        require("mvtnorm")
-        ti <- proc.time()
-	
+                                seed=123456,
+                                verbose = FALSE){
+  require("mvtnorm")
+  ti <- proc.time()
 	d <- ncol(data)
-        
 	if (length(u)==1){u <- rep(u,d)}
-
-        
+  
+	if (model == 1) {
+	  fixed = c(FALSE, FALSE, TRUE, TRUE, FALSE, FALSE, FALSE)    # fix lambda_riv 
+	} else if (model == 2) {
+	  fixed = c(FALSE, FALSE, TRUE, TRUE, FALSE, FALSE, FALSE)    # fix lambda_riv 
+	} else if (model == 3) {
+	  fixed = c(FALSE, FALSE, TRUE, FALSE, FALSE, FALSE, FALSE)
+	} else {
+	  fixed = c(FALSE, FALSE, TRUE, FALSE, FALSE, TRUE, TRUE)     # fix beta, c 
+	}
+	
 	# exponent measure and its derivatives
 	V <- function(x, par){
-            print(par)
+	          if (verbose) {
+	            print(par)
+	          }
+            
             d <- length(x)
      
             varioHalf <- 1/2 * vario(par,
@@ -598,45 +680,141 @@ pareto_BR_River_cen <- function(data,
 
 	# negative log likelihood function
 	nllik <- function(par){
-		set.seed(seed)
-
-                theta <- par[1]
-                alpha <- par[2]
-                s <- par[3]
-                riv.lmb <- par[4]
-                euc.lmb <- par[5]
-                beta <- par[6]
-                c <- par[7]
+	  set.seed(seed)
+    theta <- par[1]
+    alpha <- par[2]
+    s <- par[3]
+    riv.lmb <- par[4]
+    euc.lmb <- par[5]
+    beta <- par[6]
+    c <- par[7]
                 
-		if (theta<=0 | riv.lmb <0 | euc.lmb <0 | alpha > 2 | alpha <= 0 | s <= 0 | beta > 3*pi/4 | beta < pi/4 | c < 0){return(10^50)} 
-		
-		else {
-	
-		if (length(I)>0){y1 <- mapply(logdVK,x=as.list(data.frame(t(data.u)))[I],K=L[I],MoreArgs=list(par=par))}
-		else {y1 <- 0}
+    if (model == 1) {
 
-		if (length(J)>0){y2 <- logdV(x=data.u[J,],par=par)}
-		else {y2 <- 0}
-	
-		y <- sum(y1)+sum(y2) + (r-(length(I)+length(J)))*log(1-V(u,par=par))
-                print(-y)
-                print(par)
-                return(-y)
-		}
+      if (theta <= 0 | euc.lmb <0 | alpha > 2 |
+          alpha <= 0 | s <= 0 | beta > 3*pi/4 | beta < pi/4 | c < 0) # iterates are infeasible
+      {
+        return(10^50)
+      }                
+      else{	
+        if (length(I)>0){y1 <- mapply(logdVK,x=as.list(data.frame(t(data.u)))[I],K=L[I],MoreArgs=list(par=par))}
+        else {y1 <- 0}
+        
+        if (length(J)>0){y2 <- logdV(x=data.u[J,],par=par)}
+        else {y2 <- 0}
+        
+        y <- sum(y1)+sum(y2) + (r-(length(I)+length(J)))*log(1-V(u,par=par))
+        if (verbose) {
+          print(-y)
+          print(par)
+        }
+        return(-y)
+      }
+    } else if (model == 2) {
+
+      if (theta <= 0 |euc.lmb <0 | alpha > 2 |
+          alpha <= 0 | s <= 0 | beta > 3*pi/4 | beta < pi/4 | c < 0) # iterates are infeasible
+      {
+        return(10^50)
+      }                
+      else{	
+        if (length(I)>0){y1 <- mapply(logdVK,x=as.list(data.frame(t(data.u)))[I],K=L[I],MoreArgs=list(par=par))}
+        else {y1 <- 0}
+        
+        if (length(J)>0){y2 <- logdV(x=data.u[J,],par=par)}
+        else {y2 <- 0}
+        
+        y <- sum(y1)+sum(y2) + (r-(length(I)+length(J)))*log(1-V(u,par=par))
+        if (verbose) {
+          print(-y)
+          print(par)
+        }
+        return(-y)
+      }
+      
+    } else if (model == 3) {
+      
+      if (theta <= 0 | riv.lmb <0 | euc.lmb <0 | alpha > 2 |
+          alpha <= 0 | s <= 0 | beta > 3*pi/4 | beta < pi/4 | c < 0) # iterates are infeasible
+      {
+        return(10^50)
+      }                
+      else{	
+        if (length(I)>0){y1 <- mapply(logdVK,x=as.list(data.frame(t(data.u)))[I],K=L[I],MoreArgs=list(par=par))}
+        else {y1 <- 0}
+        
+        if (length(J)>0){y2 <- logdV(x=data.u[J,],par=par)}
+        else {y2 <- 0}
+        
+        y <- sum(y1)+sum(y2) + (r-(length(I)+length(J)))*log(1-V(u,par=par))
+        if (verbose) {
+          print(-y)
+          print(par)
+        }
+        return(-y)
+      }
+      
+    } else {
+      
+      if (theta <= 0 | riv.lmb <0 | euc.lmb <0 | alpha > 2 |
+          alpha <= 0 | s <= 0) # iterates are infeasible
+      {
+        return(10^50)
+      }                
+      else{	
+        if (length(I)>0){y1 <- mapply(logdVK,x=as.list(data.frame(t(data.u)))[I],K=L[I],MoreArgs=list(par=par))}
+        else {y1 <- 0}
+        
+        if (length(J)>0){y2 <- logdV(x=data.u[J,],par=par)}
+        else {y2 <- 0}
+        
+        y <- sum(y1)+sum(y2) + (r-(length(I)+length(J)))*log(1-V(u,par=par))
+        if (verbose) {
+          print(-y)
+          print(par)
+        }
+        
+        return(-y)
+      }
+    }
+                
+# 		if (theta<=0 | riv.lmb <0 | euc.lmb <0 | alpha > 2 | 
+# 		    alpha <= 0 | s <= 0 | beta > 3*pi/4 | beta < pi/4 | c < 0){
+# 		  return(10^50) 
+# 		
+# 		} else {
+# 	
+# 		if (length(I)>0){y1 <- mapply(logdVK,x=as.list(data.frame(t(data.u)))[I],K=L[I],MoreArgs=list(par=par))}
+# 		else {y1 <- 0}
+# 
+# 		if (length(J)>0){y2 <- logdV(x=data.u[J,],par=par)}
+# 		else {y2 <- 0}
+# 	
+# 		y <- sum(y1)+sum(y2) + (r-(length(I)+length(J)))*log(1-V(u,par=par))
+#                 print(-y)
+#                 print(par)
+#                 return(-y)
+# 		}
 	}
 
-        init2 <- init[!fixed]
-        nllik2 <- function(x){y <- numeric(length(init)); y[!fixed] <- x;
-                              y[fixed] <- init[fixed];
-                              return(nllik(y))}
-        
+  init2 <- init[!fixed]
+  nllik2 <- function(x){
+    y <- numeric(length(init)); 
+    y[!fixed] <- x;
+    y[fixed] <- init[fixed];
+    return(nllik(y))
+  }
 	
 	# optimize likelihood
-	opt <- optim(init2,nllik2,hessian=TRUE,control = list(maxit = maxit), method = method)
+	opt <- optim(init2,
+	             nllik2,
+	             hessian = TRUE,
+	             control = list(maxit = maxit), 
+	             method = method)
 	
 	z <- list()
 	z$convergence <- opt$convergence
-        z$par[fixed] <- init[fixed]
+  z$par[fixed] <- init[fixed]
 	z$par[!fixed] <- opt$par
 	z$nllik <- opt$value
 	z$hessian <- opt$hessian
@@ -699,7 +877,6 @@ plotECF <-
   }
 
 ##################################################
-
 plotEucVsHyd <- function(ECemp,
                          ECtheo,
                          DistEuc = EucDisChos,
@@ -770,7 +947,6 @@ exp.measureYN <- function(w0,w1,lambda)
 exp.measureNY <- function(w0,w1,lambda)
   1/w1 - exp.measureYY(w0,w1,lambda)
 
-
 spec.dens.HR <- function(w0,w1,lambda)
   1/(2*lambda*w1*w0^2) * dnorm(lambda + log(w1/w0) / (2*lambda))
 
@@ -786,8 +962,8 @@ SpecEstimationHR <- function(Data, thresholds = seq(.8,.999, len = 30), do.plot 
   lambda.vec <- numeric(length(thresholds))
   for (i in 1:length(thresholds))
   { idx <- which(Z > quantile(Z, thresholds[i]))
-  logllh <- function(lambda) -sum(log(spec.dens.HR(X0[idx],X1[idx],lambda)))
-  opt <- optimize(logllh,interval =c(0,50))
+  logllh <- function(lambda) -sum(log(spec.dens.HR(X0[idx], X1[idx], lambda)))
+  opt <- optimize(logllh, interval =c(0,50))
   lambda.vec[i] <- opt$minimum
   }
   EC <- Vario2EC(4*lambda.vec^2)
@@ -795,8 +971,6 @@ SpecEstimationHR <- function(Data, thresholds = seq(.8,.999, len = 30), do.plot 
     plot(thresholds, EC)
   return(EC)
 }
-
-
 
 CensoredEstimationHR <- function(Data, thresholds = seq(.8,.999, len = 30), normalize = TRUE, do.plot = FALSE)
 {
@@ -814,13 +988,13 @@ CensoredEstimationHR <- function(Data, thresholds = seq(.8,.999, len = 30), norm
   for (i in 1:length(thresholds)){
     thr <- thresholds[i]
     u <- quantile(X0, thr)
-    logllh <- function(lambda){-CensoredLLH.HR(X0,X1,u,rep(lambda,times=n))}       
-    
-    opt <- optimize(logllh,interval =c(0,4))
+    logllh <- function(lambda){
+      -CensoredLLH.HR(X0, X1, u, rep(lambda, times=n))}       
+    opt <- optimize(logllh, interval = c(0, 4))
     lambda.vec[i] <- opt$minimum
   }
-  EC <- Vario2EC(4*lambda.vec^2)
-  if(do.plot)
+  EC <- Vario2EC(4 * lambda.vec ^ 2)
+  if (do.plot)
     plot(thresholds, EC)
   return(EC)
 }
@@ -843,80 +1017,78 @@ CensoredLLH.HR <- function(X0,X1,u,lambda)
 }
 
 
-PairwiseLLH <- function(Data, u, init, fixed, method=  "BFGS", maxit = 100, cen = TRUE)
-{
-  n <- nrow(Data)
-  pair <- expand.grid(1:NoSt,1:NoSt)
-  pair <- pair[,2:1]
-  pair <- pair[pair[,1]<pair[,2],]
-  pair <- matrix(c(pair[[1]],pair[[2]]),ncol=2)
-  
-  nllik <- function(D, par)
-  {
-    print(par)
-    theta <- par[1]
-    alpha <- par[2]
-    s <- par[3]
-    riv.lmb <- par[4]
-    euc.lmb <- par[5]
-    beta <- par[6]
-    c <- par[7]
-    
-    if (theta<=0 | riv.lmb <0 | euc.lmb <0 | alpha > 2 | alpha <= 0 | s <= 0 | beta > 3*pi/4 | beta < pi/4 | c < 0){return(10^50)}
-    
-    lambda.vec.tmp <- (vario(par,
-                             riv.dist = RiverDisChos,
-                             euc.coords = CatCntrWtKmChos,
-                             riv.weights = WeightChos
-    ))^{1/2} / 2
-    lambda.vec <- rep(t(lambda.vec.tmp)[lower.tri(lambda.vec.tmp)], each = n)
-    if(cen){
-      llh <- CensoredLLH.HR(X0 = D[,1] ,X1 = D[,2] ,u = u , lambda = lambda.vec)
-    }else{
-      Z <- D[,1] + D[,2]
-      idx <- which(Z > u)
-      llh <- sum(log(spec.dens.HR((D[,1])[idx] ,(D[,2])[idx] ,lambda = lambda.vec[idx])))
-    }
-    print(-llh)
-    return(-llh)
-  }
-  
-  Data.pair <- matrix(Data[,pair],ncol=2)
-  
-  init2 <- init[!fixed]
-  nllik2 <- function(x){y <- numeric(length(init)); y[!fixed] <- x;
-  y[fixed] <- init[fixed];
-  return(nllik(D = Data.pair, par = y))}
-  
-  
-  
-  opt <- optim(par=init2, fn=nllik2, hessian=TRUE, method=method, control=list(maxit = maxit))
-  
-  z <- list()
-  z$convergence <- opt$convergence
-  z$par[fixed] <- init[fixed]
-  z$par[!fixed] <- opt$par
-  z$nllik <- opt$value
-  z$hessian <- opt$hessian
-  
-  return(z)
-  
-}
+# PairwiseLLH <- function(Data, u, init, fixed, method=  "BFGS", maxit = 100, cen = TRUE)
+# {
+#   n <- nrow(Data)
+#   pair <- expand.grid(1:NoSt,1:NoSt)
+#   pair <- pair[,2:1]
+#   pair <- pair[pair[,1]<pair[,2],]
+#   pair <- matrix(c(pair[[1]],pair[[2]]),ncol=2)
+#   
+#   nllik <- function(D, par)
+#   {
+#     print(par)
+#     theta <- par[1]
+#     alpha <- par[2]
+#     s <- par[3]
+#     riv.lmb <- par[4]
+#     euc.lmb <- par[5]
+#     beta <- par[6]
+#     c <- par[7]
+#     
+#     if (theta<=0 | riv.lmb <0 | euc.lmb <0 | alpha > 2 | alpha <= 0 | s <= 0 | beta > 3*pi/4 | beta < pi/4 | c < 0){return(10^50)}
+#     
+#     lambda.vec.tmp <- (vario(par,
+#                              riv.dist = RiverDisChos,
+#                              euc.coords = CatCntrWtKmChos,
+#                              riv.weights = WeightChos
+#     ))^{1/2} / 2
+#     lambda.vec <- rep(t(lambda.vec.tmp)[lower.tri(lambda.vec.tmp)], each = n)
+#     if(cen){
+#       llh <- CensoredLLH.HR(X0 = D[,1] ,X1 = D[,2] ,u = u , lambda = lambda.vec)
+#     }else{
+#       Z <- D[,1] + D[,2]
+#       idx <- which(Z > u)
+#       llh <- sum(log(spec.dens.HR((D[,1])[idx] ,(D[,2])[idx] ,lambda = lambda.vec[idx])))
+#     }
+#     print(-llh)
+#     return(-llh)
+#   }
+#   
+#   Data.pair <- matrix(Data[,pair],ncol=2)
+#   
+#   init2 <- init[!fixed]
+#   nllik2 <- function(x){y <- numeric(length(init)); y[!fixed] <- x;
+#   y[fixed] <- init[fixed];
+#   return(nllik(D = Data.pair, par = y))}
+#   
+#   
+#   
+#   opt <- optim(par=init2, fn=nllik2, hessian=TRUE, method=method, control=list(maxit = maxit))
+#   
+#   z <- list()
+#   z$convergence <- opt$convergence
+#   z$par[fixed] <- init[fixed]
+#   z$par[!fixed] <- opt$par
+#   z$nllik <- opt$value
+#   z$hessian <- opt$hessian
+#   
+#   return(z)
+#   
+# }
 
-
-
-ScatterPlot <- function(ScSts,StsInfo,X,filename) {
-  
+# plot a scatter plot
+ScatterPlot <- function(ScSts, StsInfo, X, filename) {
   pdf(filename)
   par(cex = 1.3, cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5, pch = 19,
       mar = c(5,5,4,2) +.1,pty="s")
-  xlab <- paste(StsInfo[ScSts[1],1]," (",as.character(ScSts[1]),")",sep="")
-  ylab <- paste(StsInfo[ScSts[2],1]," (",as.character(ScSts[2]),")",sep="")
-  plot(X[,ScSts[1]],X[,ScSts[2]],xlab=xlab,ylab=ylab)
+  xlab <- paste(StsInfo[ScSts[1], 1], " (",as.character(ScSts[1]),")", sep="")
+  ylab <- paste(StsInfo[ScSts[2], 1], " (",as.character(ScSts[2]),")", sep="")
+  plot(X[,ScSts[1]], X[,ScSts[2]], xlab=xlab, ylab=ylab)
   dev.off()
 }
 
-
+# plot a box plot
 BoxPlots <- function(Par.spec,Par.cens,filename) {
   theta1 <- 2.2
   alpha1 <- 1.7
@@ -1063,8 +1235,7 @@ PlottingDeclusterdEvents <- function(Year, Stations, AllRes, ComTSs, StsInfo, fi
 
 
 ############################# Fitting a GEV distribution by Joint PPP likelihood#########################
-
-PPFit <- function(Data,u,NoYears,Init,CovarMu,CovarSc,CovarXi,LogModel,method=method,control=control) {
+PPFit <- function(Data, u, NoYears, Init, CovarMu, CovarSc, CovarXi, LogModel, method=method, control=control) {
   NoSt <- length(Data)
   NoParMu <- ncol(CovarMu)
   NoParSc <- ncol(CovarSc)
@@ -1074,39 +1245,34 @@ PPFit <- function(Data,u,NoYears,Init,CovarMu,CovarSc,CovarXi,LogModel,method=me
   PP.lik.linear <- function(Params) {
     Out <- 0
     for (i in 1:NoSt) {
-      mu <- sum(Params[1:NoParMu]*(CovarMu[i,]))
-      sc <- sum(Params[(NoParMu+1):(NoParMu+NoParSc)]*CovarSc[i,])
-      xi <- sum(Params[(NoParMu+NoParSc+1):NoPar]*CovarXi[i,])
-      if (LogModel==TRUE) {
+      mu <- sum(Params[1:NoParMu]*(CovarMu[i, ]))
+      sc <- sum(Params[(NoParMu+1):(NoParMu+NoParSc)]*CovarSc[i, ])
+      xi <- sum(Params[(NoParMu+NoParSc+1):NoPar]*CovarXi[i, ])
+      if (LogModel == TRUE) {
         mu <- exp(mu)
         sc <- exp(sc)
         if (sc==Inf)
           sc <- 0
       }
       y1 <- 1 + xi * ((u[i] - mu)/sc)
-      y2 <- 1 + xi * ((Data[[i]]- mu)/sc)
-      InterceptSc <- Params[NoParMu+1]
+      y2 <- 1 + xi * ((Data[[i]] - mu)/sc)
+      InterceptSc <- Params[NoParMu + 1]
       InterceptMu <- Params[1]
       
-      if ((sc <= 0) | (min(y1) <= 0) | (min(y2) <= 0) | InterceptSc <= 0 | InterceptMu <0 ) { 
+      if ((sc <= 0) | (min(y1) <= 0) | (min(y2) <= 0) | InterceptSc <= 0 | InterceptMu <0) { 
         l <- 10^6
       } else {
-        l <- NoYears[i]*(y1^(-1/xi))+length(Data[[i]])*log(sc)+(1/xi + 1)*sum(log(y2))
+        l <- NoYears[i]*(y1 ^ (-1/xi)) + length(Data[[i]]) * log(sc) + (1 / xi + 1) * sum(log(y2))
       }
       Out <- Out+l
     }
     return(Out)
   }
   
-  
-  
-  x <- optim(Init ,PP.lik.linear, hessian = TRUE, control = control,method=method )
+  x <- optim(Init, PP.lik.linear, hessian = TRUE, control = control, method = method )
   output <- x
   return(output)
-  
 }
-
-
 
 
 ECDF <- function (x) {
@@ -1129,7 +1295,6 @@ QQPlot <- function (a, dat,main,Bounds,filename) {
   EmpCdfFun <- ECDF(DatSort)
   EmpCdf <- EmpCdfFun(DatSort)
   TheQuant <- gevq(a,1-EmpCdf)
-  
   
   xlim1 <- c(min(c(DatSort,TheQuant)),max(c(DatSort,TheQuant)))
   xlim <- c(floor(xlim1[1]/100)*100,ceiling(xlim1[2]/100)*100)
