@@ -83,9 +83,7 @@ ObtainMultVarEvents <- function(TSs, U, Lag, Year, StNames, Plotting, mfrow)
   # Lag: window half-width (total length is 2*lag + 1)
   # Year: year (1960-2010)
   # StNames: station indices (1-31)
-  # Plotting: 
-  # mfrow: 
-  
+
   CommonDate <- TSs$Date
   YearAll <- as.numeric(substr(CommonDate, 1, 4))
   Data <- data.frame(TSs[, -1]) # drop the first column (date)
@@ -162,33 +160,6 @@ ObtainMultVarEvents <- function(TSs, U, Lag, Year, StNames, Plotting, mfrow)
   AllEventsTemp <- numeric(NoSt)
   Events <- ObtainMultVarEvents(Data = DataYear, Ecdf = EcdfYear, Quant = Quant, m = Lag)
   EventsTemp <- Events$Events
-  
-  # if (length(EventsTemp) >0 & Plotting==1)
-  # {
-  #   row.names(EventsTemp) <- rep(Year,nrow(EventsTemp))
-  #   ####Plotting###
-  #   par(mfrow=mfrow, oma = c(1,1,1,1) + 0.1,
-  #       mar = c(1,1,1,1) + 0.1)
-  #   NoRow <- nrow(DataYear)
-  #   for (j in 1:NoSt)
-  #   {	
-  #     xlim <- c(1,NoRow)
-  #     ylim <- c(min(DataYear[,j])-1,max(Quant[j],max(DataYear[,j])+10))
-  #     plot(DataYear[,j],xlim=xlim,ylim=ylim,xlab="",ylab="",axes=F,type="l",lty=2)
-  #     abline(h=Quant[j],col="blue")
-  #     mtext(StNames[j], side=4)
-  #     axis(2)
-  #     box()
-  #     par(new=TRUE)
-  #     plot(Events$Location[,j],Events$Events[,j],col="red",xlim=xlim,ylim=ylim,xlab="",ylab="",axes=F)
-  #     PlotName <- paste("Events",as.character(Year),".pdf",sep="")
-  #     SavingPlotAdress <- paste(getwd(),"Bavaria/Results/EventsPlotForCensoredLik",PlotName,sep="/")
-  #     dev.copy(pdf,SavingPlotAdress)
-  #     dev.off()
-  #     
-  #     
-  #   }
-  # }
   
   Result <- list()
   Result$AllEvMat <- t(Events$Events)
@@ -486,15 +457,6 @@ pareto_BR_River <- function(
       }
     }
     
-    # if (theta <= 0 | riv.lmb <0 | euc.lmb <0 | alpha > 2 |
-    #     alpha <= 0 | s <= 0 | beta > 3*pi/4 | beta < pi/4 | c < 0) # iterates are infeasible
-    #   {
-    #   return(10^50)
-    #   }                
-    #   else{	
-    #     y <- sum(logdV(x=data.u, par=par))
-    #     return(-y)
-    #   }
   }
   
   init2 <- init[!fixed]
@@ -999,8 +961,6 @@ CensoredEstimationHR <- function(Data, thresholds = seq(.8,.999, len = 30), norm
   return(EC)
 }
 
-
-
 CensoredLLH.HR <- function(X0,X1,u,lambda)
 {
   idxYN <- which(X0 > u & X1 < u)
@@ -1016,66 +976,6 @@ CensoredLLH.HR <- function(X0,X1,u,lambda)
   return(sum(log(y)))
 }
 
-
-# PairwiseLLH <- function(Data, u, init, fixed, method=  "BFGS", maxit = 100, cen = TRUE)
-# {
-#   n <- nrow(Data)
-#   pair <- expand.grid(1:NoSt,1:NoSt)
-#   pair <- pair[,2:1]
-#   pair <- pair[pair[,1]<pair[,2],]
-#   pair <- matrix(c(pair[[1]],pair[[2]]),ncol=2)
-#   
-#   nllik <- function(D, par)
-#   {
-#     print(par)
-#     theta <- par[1]
-#     alpha <- par[2]
-#     s <- par[3]
-#     riv.lmb <- par[4]
-#     euc.lmb <- par[5]
-#     beta <- par[6]
-#     c <- par[7]
-#     
-#     if (theta<=0 | riv.lmb <0 | euc.lmb <0 | alpha > 2 | alpha <= 0 | s <= 0 | beta > 3*pi/4 | beta < pi/4 | c < 0){return(10^50)}
-#     
-#     lambda.vec.tmp <- (vario(par,
-#                              riv.dist = RiverDisChos,
-#                              euc.coords = CatCntrWtKmChos,
-#                              riv.weights = WeightChos
-#     ))^{1/2} / 2
-#     lambda.vec <- rep(t(lambda.vec.tmp)[lower.tri(lambda.vec.tmp)], each = n)
-#     if(cen){
-#       llh <- CensoredLLH.HR(X0 = D[,1] ,X1 = D[,2] ,u = u , lambda = lambda.vec)
-#     }else{
-#       Z <- D[,1] + D[,2]
-#       idx <- which(Z > u)
-#       llh <- sum(log(spec.dens.HR((D[,1])[idx] ,(D[,2])[idx] ,lambda = lambda.vec[idx])))
-#     }
-#     print(-llh)
-#     return(-llh)
-#   }
-#   
-#   Data.pair <- matrix(Data[,pair],ncol=2)
-#   
-#   init2 <- init[!fixed]
-#   nllik2 <- function(x){y <- numeric(length(init)); y[!fixed] <- x;
-#   y[fixed] <- init[fixed];
-#   return(nllik(D = Data.pair, par = y))}
-#   
-#   
-#   
-#   opt <- optim(par=init2, fn=nllik2, hessian=TRUE, method=method, control=list(maxit = maxit))
-#   
-#   z <- list()
-#   z$convergence <- opt$convergence
-#   z$par[fixed] <- init[fixed]
-#   z$par[!fixed] <- opt$par
-#   z$nllik <- opt$value
-#   z$hessian <- opt$hessian
-#   
-#   return(z)
-#   
-# }
 
 # plot a scatter plot
 ScatterPlot <- function(ScSts, StsInfo, X, filename) {
@@ -1338,6 +1238,3 @@ ConfinSimul <- function(Par,R,Data) {
   }
   return(Bounds)
 }
-
-
-
