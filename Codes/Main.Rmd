@@ -6,7 +6,7 @@ output: pdf_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, root.dir = rprojroot::find_rstudio_root_file())
+knitr::opts_chunk$set(echo = TRUE, eval = FALSE, root.dir = rprojroot::find_rstudio_root_file())
 ```
 
 # Variable name interpretation
@@ -127,7 +127,7 @@ par2paper <- function(par)
 
 ## Plots in the prelim exam report
 
-### Figure 3：River distance vs Euclidean distance
+### Figure 3: River distance vs Euclidean distance
 
 ```{r}
 # Remove diagonal entries (same as before)
